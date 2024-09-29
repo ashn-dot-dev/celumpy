@@ -1,0 +1,542 @@
+let gf = import("minimalist-game-framework/main.lumpy");
+
+################################################################################
+# UTILITIES
+################################################################################
+
+let SCALE = 4;
+let GAME_W = 320;
+let GAME_H = 180;
+let TILE_S = 8;
+
+# Translate an object by some vector amount.
+# Works with both vec2 and rect objects.
+let translate = function(object, vec) {
+    object.x = object.x + vec.x;
+    object.y = object.y + vec.y;
+    return object;
+};
+
+# Returns true if rects a and b overlap.
+let overlapping = function(a, b) {
+    if a.x + a.w <= b.x {
+        return false;
+    }
+    if a.x >= b.x + b.w {
+        return false;
+    }
+    if a.y + a.h <= b.y {
+        return false;
+    }
+    if a.y >= b.y + b.h {
+        return false;
+    }
+    return true;
+};
+
+let draw_rect_empty = function(rect, color, thickness) {
+    rect.x = rect.x * SCALE;
+    rect.y = rect.y * SCALE;
+    rect.w = rect.w * SCALE;
+    rect.h = rect.h * SCALE;
+    gf::draw::rect_empty(rect, color, thickness * SCALE);
+};
+
+let draw_rect_solid = function(rect, color) {
+    rect.x = rect.x * SCALE;
+    rect.y = rect.y * SCALE;
+    rect.w = rect.w * SCALE;
+    rect.h = rect.h * SCALE;
+    gf::draw::rect_solid(rect, color);
+};
+
+# Entities can either be a solid or an actor.
+let entity = {
+    "new": function() {
+        let self = {
+            "remainder": gf::vec2::new(0, 0),
+        };
+        setmeta(self.&, entity);
+        return self;
+    },
+    "collider": function(self) {
+        error "unimplemented";
+    }
+};
+
+let actor = union(entity, {
+    "new": function(rect) {
+        assert(rect.x.is_integer());
+        assert(rect.y.is_integer());
+        assert(rect.w.is_integer());
+        assert(rect.h.is_integer());
+        let self = union(entity::new(), {
+            "rect": rect,
+        });
+        setmeta(self.&, actor);
+        return self;
+    },
+    "collider": function(self) {
+        return self.*.rect;
+    },
+    "is_riding": function(self, solid) {
+        return
+            not overlapping(solid.collider(), self.*.collider())
+            and overlapping(solid.collider(), translate(self.*.collider(), gf::vec2::new(0, +1)));
+    },
+    "move_x": function(self, amount, action) {
+        self.*.remainder.x = self.*.remainder.x + amount;
+        let move = self.*.remainder.x.round();
+        if move != 0 {
+            self.*.remainder.x = self.*.remainder.x - move;
+            let sign = +1 * number(move > 0) + -1 * number(move < 0);
+            while move != 0 {
+                let next = translate(self.*.collider(), gf::vec2::new(sign, 0));
+
+                if not collides_with_any_solid(next) {
+                    self.*.rect.x = self.*.rect.x + sign;
+                    move = move - sign;
+                }
+                else {
+                    if type(action) != "null" {
+                        action(self);
+                    }
+                    break;
+                }
+            }
+        }
+    },
+    "move_y": function(self, amount, action) {
+        self.*.remainder.y = self.*.remainder.y + amount;
+        let move = self.*.remainder.y.round();
+        if move != 0 {
+            self.*.remainder.y = self.*.remainder.y - move;
+            let sign = +1 * number(move > 0) + -1 * number(move < 0);
+            while move != 0 {
+                let next = translate(self.*.collider(), gf::vec2::new(0, sign));
+
+                if not collides_with_any_solid(next) {
+                    self.*.rect.y = self.*.rect.y + sign;
+                    move = move - sign;
+                }
+                else {
+                    if type(action) != "null" {
+                        action(self);
+                    }
+                    break;
+                }
+            }
+        }
+    },
+    "draw": function(self) {
+        error "unimplemented";
+    },
+    "squish": function(self) {
+        for i in actors.count() {
+            if actors[i] == self {
+                actors.remove(i);
+                return;
+            }
+        }
+    }
+});
+
+let solid = union(entity, {
+    "new": function(rect) {
+        assert(rect.x.is_integer());
+        assert(rect.y.is_integer());
+        assert(rect.w.is_integer());
+        assert(rect.h.is_integer());
+        let self = union(entity::new(), {
+            "rect": rect,
+            "collidable": true,
+        });
+        setmeta(self.&, solid);
+        return self;
+    },
+    "collider": function(self) {
+        return self.*.rect;
+    },
+    "move": function(self, x, y) {
+        self.*.remainder.x = self.*.remainder.x + x;
+        self.*.remainder.y = self.*.remainder.y + y;
+        let move_x = self.*.remainder.x.round();
+        let move_y = self.*.remainder.y.round();
+        if move_x != 0 or move_y != 0 {
+            let riding = [];
+            for actor in actors {
+                if actor.*.is_riding(self.*) {
+                    riding.push(actor);
+                }
+            }
+
+            self.*.collidable = false;
+
+            if move_x != 0 {
+                self.*.remainder.x = self.*.remainder.x - move_x;
+                self.*.rect.x = self.*.rect.x + move_x;
+                if move_x > 0 {
+                    for actor in actors {
+                        if overlapping(self.*.rect, actor.*.collider()) {
+                            # Push Right
+                            let solid_r = self.*.rect.x + self.*.rect.w;
+                            let actor_l = actor.*.collider().x;
+                            actor.*.move_x(solid_r - actor_l, getmeta(actor.*)::squish);
+                        }
+                        elif riding.contains(actor) {
+                            # Carry Right
+                            actor.*.move_x(move_x, null);
+                        }
+                    }
+                }
+                if move_x < 0 {
+                    for actor in actors {
+                        if overlapping(self.*.rect, actor.*.collider()) {
+                            # Push Left
+                            let solid_l = self.*.rect.x;
+                            let actor_r = actor.*.collider().x + actor.*.collider().w;
+                            actor.*.move_x(solid_l - actor_r, getmeta(actor.*)::squish);
+                        }
+                        elif riding.contains(actor) {
+                            # Carry Left
+                            actor.*.move_x(move_x, null);
+                        }
+                    }
+                }
+            }
+            if move_y != 0 {
+                self.*.remainder.y = self.*.remainder.y - move_y;
+                self.*.rect.y = self.*.rect.y + move_y;
+                if move_y > 0 {
+                    for actor in actors {
+                        if overlapping(self.*.rect, actor.*.collider()) {
+                            # Push Down
+                            let solid_bot = self.*.rect.y + self.*.rect.h;
+                            let actor_top = actor.*.collider().y;
+                            actor.*.move_y(solid_bot - actor_top, getmeta(actor.*)::squish);
+                        }
+                        elif riding.contains(actor) {
+                            # Carry Down
+                            actor.*.move_y(move_y, null);
+                        }
+                    }
+                }
+                if move_y < 0 {
+                    for actor in actors {
+                        if overlapping(self.*.rect, actor.*.collider()) {
+                            # Push Up
+                            let solid_top = self.*.rect.y;
+                            let actor_bot = actor.*.collider().y + actor.*.collider().h;
+                            actor.*.move_y(solid_top - actor_bot, getmeta(actor.*)::squish);
+                        }
+                        elif riding.contains(actor) {
+                            # Carry Up
+                            actor.*.move_y(move_y, null);
+                        }
+                    }
+                }
+            }
+
+            self.*.collidable = true;
+        }
+    },
+    "draw": function(self) {
+        error "unimplemented";
+    }
+});
+
+let actors = [];
+let solids = [];
+
+let collides_with_any_solid = function(rect) {
+    for solid in solids {
+        if solid.*.collidable and overlapping(rect, solid.*.collider()) {
+            return true;
+        }
+    }
+    return false;
+};
+
+let PLAYER_W = 2 * TILE_S;
+let PLAYER_H = 2 * TILE_S;
+let player = union(actor, {
+    "new": function(position) {
+        let rect = gf::rect::new(
+            position.x,
+            position.y,
+            PLAYER_W,
+            PLAYER_H,
+        );
+        let self = union(actor::new(rect), {
+            "velocity": gf::vec2::new(0, 0),
+            "coyote_time": 0,
+            "jump_buffer": 0,
+        });
+        setmeta(self.&, player);
+        return self;
+    },
+    "is_grounded": function(self) {
+        return collides_with_any_solid(
+            translate(self.*.collider(), gf::vec2::new(0, +1))
+        );
+    },
+    "draw": function(self) {
+        draw_rect_solid(self.*.collider(), gf::color::new(0x00, 0xAA, 0x00, null));
+        draw_rect_empty(self.*.collider(), gf::color::new(0x00, 0xEE, 0x00, null), 1);
+    },
+    # Actions
+    "halt_x": function(self) {
+        self.*.velocity.x = 0;
+    },
+    "halt_y": function(self) {
+        self.*.velocity.y = 0;
+    },
+});
+
+let terrain = union(solid, {
+    "new": function(rect) {
+        let self = solid::new(rect);
+        setmeta(self.&, terrain);
+        return self;
+    },
+    "draw": function(self) {
+        draw_rect_solid(self.*.rect, gf::color::new(0x00, 0xAA, 0xAA, null));
+        draw_rect_empty(self.*.rect, gf::color::new(0x00, 0xEE, 0xEE, null), 1);
+    },
+});
+
+let platform = union(solid, {
+    "new": function(rect, direction) {
+        let self = union(solid::new(rect), {
+            "direction": direction,
+        });
+        setmeta(self.&, platform);
+        return self;
+    },
+    "draw": function(self) {
+        draw_rect_solid(self.*.rect, gf::color::new(0xAA, 0x00, 0xAA, null));
+        draw_rect_empty(self.*.rect, gf::color::new(0xEE, 0x00, 0xEE, null), 1);
+    },
+});
+
+################################################################################
+# GAME
+################################################################################
+
+let SCREEN_W = GAME_W * SCALE;
+let SCREEN_H = GAME_H * SCALE;
+gf::init(SCREEN_W, SCREEN_H, "Celumpy");
+let frame = 1;
+
+let font = gf::font::load(module::directory + "/assets/Unispace-Bold.otf", (TILE_S - 2) * SCALE);
+
+let player = player::new(gf::vec2::new(
+    (GAME_W / 4 - PLAYER_W / 4).floor(),
+    (GAME_H / 2 - PLAYER_H / 2).floor(),
+));
+actors.push(player.&);
+
+let floor = terrain::new(
+    gf::rect::new(
+        0,
+        (GAME_H / TILE_S).floor() * TILE_S - TILE_S * 2,
+        GAME_W,
+        TILE_S * 3,
+    )
+);
+let roof = terrain::new(
+    gf::rect::new(
+        0,
+        0,
+        GAME_W,
+        TILE_S,
+    )
+);
+let wall_l = terrain::new(
+    gf::rect::new(
+        0,
+        0,
+        TILE_S * 2,
+        GAME_H - (GAME_H - floor.rect.y),
+    )
+);
+let wall_r = terrain::new(
+    gf::rect::new(
+        GAME_W - TILE_S * 2,
+        0,
+        TILE_S * 2,
+        GAME_H - (GAME_H - floor.rect.y),
+    )
+);
+let platform_a = platform::new(
+    gf::rect::new(
+        wall_l.rect.w + TILE_S,
+        TILE_S * 4,
+        TILE_S * 4,
+        TILE_S * 1,
+    ),
+    gf::vec2::new(0, +1),
+);
+let platform_b = platform::new(
+    gf::rect::new(
+        wall_l.rect.w + TILE_S * 10,
+        TILE_S * 13,
+        TILE_S * 4,
+        TILE_S * 1,
+    ),
+    gf::vec2::new(+1, 0),
+);
+let terrain_a = terrain::new(
+    gf::rect::new(
+        ((GAME_W / 2) / TILE_S).floor() * TILE_S - TILE_S * 4,
+        TILE_S * 14,
+        TILE_S * 8,
+        TILE_S * 2
+    ),
+);
+let terrain_b = terrain::new(
+    gf::rect::new(
+        terrain_a.rect.x,
+        terrain_a.rect.y + terrain_a.rect.h,
+        TILE_S * 4,
+        floor.rect.y - (terrain_a.rect.y + terrain_a.rect.h),
+    ),
+);
+let terrain_c = terrain::new(
+    gf::rect::new(
+        terrain_a.rect.x + TILE_S * 4,
+        terrain_a.rect.y + terrain_a.rect.h + player.rect.h,
+        TILE_S * 3,
+        floor.rect.y - (terrain_a.rect.y + terrain_a.rect.h + player.rect.h),
+    ),
+);
+let terrain_d = terrain::new(
+    gf::rect::new(
+        GAME_W - wall_r.rect.w - TILE_S * 8,
+        TILE_S * 12,
+        TILE_S * 4,
+        TILE_S * 1,
+    ),
+);
+let terrain_e = terrain::new(
+    gf::rect::new(
+        GAME_W - wall_r.rect.w - TILE_S * 1,
+        TILE_S * 8,
+        TILE_S * 1,
+        TILE_S * 1,
+    ),
+);
+let terrain_f = terrain::new(
+    gf::rect::new(
+        wall_l.rect.w + TILE_S,
+        platform_a.rect.y - TILE_S,
+        TILE_S * 4,
+        TILE_S * 1,
+    ),
+);
+solids.push(floor.&);
+solids.push(roof.&);
+solids.push(wall_l.&);
+solids.push(wall_r.&);
+solids.push(platform_a.&);
+solids.push(platform_b.&);
+solids.push(terrain_a.&);
+solids.push(terrain_b.&);
+solids.push(terrain_c.&);
+solids.push(terrain_d.&);
+solids.push(terrain_e.&);
+solids.push(terrain_f.&);
+
+while gf::running() {
+    let update_player = function() {
+        # Update Jump Buffer
+        if gf::key::pressed("SPACE") {
+            player.jump_buffer = 4;
+        }
+        elif gf::key::released("SPACE") {
+            player.jump_buffer = 0;
+        }
+        elif gf::key::held("SPACE") and player.jump_buffer > 0 {
+            player.jump_buffer = player.jump_buffer - 1;
+        }
+
+        # Update Coyote Time
+        if player.is_grounded() {
+            player.coyote_time = 8;
+        }
+        elif player.coyote_time > 0 {
+            player.coyote_time = player.coyote_time - 1;
+        }
+
+        # Process Jump Action
+        if player.jump_buffer > 0 and player.coyote_time > 0 {
+            player.velocity.y = player.velocity.x - 5;
+        }
+
+        # Process Gravity
+        let BASE_GRAVITY = 0.45;
+        let HELD_GRAVITY = BASE_GRAVITY * 0.5;
+        if gf::key::held("SPACE") {
+            player.velocity.y = player.velocity.y + HELD_GRAVITY;
+        }
+        else {
+            player.velocity.y = player.velocity.y + BASE_GRAVITY;
+        }
+
+        # Process Directional Movement
+        let MOVEMENT_DELTA = 2;
+        let delta = player.velocity;
+        if gf::key::held("LARROW") {
+            delta.x = delta.x - MOVEMENT_DELTA;
+        }
+        if gf::key::held("RARROW") {
+            delta.x = delta.x + MOVEMENT_DELTA;
+        }
+        player.move_x(delta.x, getmeta(player)::halt_x);
+        player.move_y(delta.y, getmeta(player)::halt_y);
+    };
+
+    let update_world = function() {
+        let amount = math::sin(frame / 60); # arbitrary
+        for platform in [platform_a.&, platform_b.&] {
+            let move = platform.*.direction * amount;
+            platform.*.move(move.x, move.y);
+        }
+    };
+
+    # Updates to the world are processed before any player updates are taken
+    # into account. The world is an unstoppable force and an immovable object.
+    update_world();
+    # Update player state after updating world state.
+    update_player();
+
+    # Render
+    for solid in solids {
+        solid.*.draw();
+    }
+    for actor in actors {
+        actor.*.draw();
+    }
+    gf::draw::text(
+        font,
+        gf::vec2::new(SCALE, SCALE),
+        gf::color::new(0x00, 0x80, 0x00, null),
+        "FPS " + string(gf::fps().fixed(0)),
+    );
+    if not actors.contains(player.&) {
+        let text = "SQUISHED";
+        let size = gf::measure::text(font, text);
+        gf::draw::text(
+            font,
+            gf::vec2::new(SCREEN_W / 2 - size.x / 2, SCREEN_H / 2 - size.y / 2),
+            gf::color::new(0xFF, 0xFF, 0xFF, null),
+            text,
+        );
+    }
+
+    # Advance Frame
+    gf::tick();
+    frame = frame + 1;
+}
+
+gf::fini();
