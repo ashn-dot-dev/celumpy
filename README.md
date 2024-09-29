@@ -13,6 +13,10 @@ using the builtin
 [Minimalist Lumpy Game Framework](https://github.com/ashn-dot-dev/lumpy/tree/main/lib/minimalist-game-framework)
 library.
 
+## Demo Video
+
+https://github.com/user-attachments/assets/f72930f7-8e24-4035-b298-9e4a25cc273d
+
 ## Building & Running
 
 [Install Lumpy](https://github.com/ashn-dot-dev/lumpy/tree/main?tab=readme-ov-file#installing)
