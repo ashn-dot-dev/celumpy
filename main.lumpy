@@ -499,7 +499,7 @@ while gf::running() {
     let update_world = function() {
         let amount = math::sin(frame / 60); # arbitrary
         for platform in [platform_a.&, platform_b.&] {
-            let move = platform.*.direction * amount;
+            let move = gf::vec2::mul(platform.*.direction, amount);
             platform.*.move(move.x, move.y);
         }
     };
