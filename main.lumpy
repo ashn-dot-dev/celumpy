@@ -52,9 +52,9 @@ let draw_rect_solid = function(rect, color) {
 
 # Entities can either be a solid or an actor.
 let entity = {
-    "new": function() {
+    "init": function() {
         let self = {
-            "remainder": gf::vec2::new(0, 0),
+            "remainder": gf::vec2::init(0, 0),
         };
         setmeta(self.&, entity);
         return self;
@@ -65,12 +65,12 @@ let entity = {
 };
 
 let actor = union(entity, {
-    "new": function(rect) {
+    "init": function(rect) {
         assert(rect.x.is_integer());
         assert(rect.y.is_integer());
         assert(rect.w.is_integer());
         assert(rect.h.is_integer());
-        let self = union(entity::new(), {
+        let self = union(entity::init(), {
             "rect": rect,
         });
         setmeta(self.&, actor);
@@ -82,7 +82,7 @@ let actor = union(entity, {
     "is_riding": function(self, solid) {
         return
             not overlapping(solid.collider(), self.*.collider())
-            and overlapping(solid.collider(), translate(self.*.collider(), gf::vec2::new(0, +1)));
+            and overlapping(solid.collider(), translate(self.*.collider(), gf::vec2::init(0, +1)));
     },
     "move_x": function(self, amount, action) {
         self.*.remainder.x = self.*.remainder.x + amount;
@@ -91,7 +91,7 @@ let actor = union(entity, {
             self.*.remainder.x = self.*.remainder.x - move;
             let sign = +1 * number(move > 0) + -1 * number(move < 0);
             while move != 0 {
-                let next = translate(self.*.collider(), gf::vec2::new(sign, 0));
+                let next = translate(self.*.collider(), gf::vec2::init(sign, 0));
 
                 if not collides_with_any_solid(next) {
                     self.*.rect.x = self.*.rect.x + sign;
@@ -113,7 +113,7 @@ let actor = union(entity, {
             self.*.remainder.y = self.*.remainder.y - move;
             let sign = +1 * number(move > 0) + -1 * number(move < 0);
             while move != 0 {
-                let next = translate(self.*.collider(), gf::vec2::new(0, sign));
+                let next = translate(self.*.collider(), gf::vec2::init(0, sign));
 
                 if not collides_with_any_solid(next) {
                     self.*.rect.y = self.*.rect.y + sign;
@@ -142,12 +142,12 @@ let actor = union(entity, {
 });
 
 let solid = union(entity, {
-    "new": function(rect) {
+    "init": function(rect) {
         assert(rect.x.is_integer());
         assert(rect.y.is_integer());
         assert(rect.w.is_integer());
         assert(rect.h.is_integer());
-        let self = union(entity::new(), {
+        let self = union(entity::init(), {
             "rect": rect,
             "collidable": true,
         });
@@ -260,15 +260,15 @@ let collides_with_any_solid = function(rect) {
 let PLAYER_W = 2 * TILE_S;
 let PLAYER_H = 2 * TILE_S;
 let player = union(actor, {
-    "new": function(position) {
-        let rect = gf::rect::new(
+    "init": function(position) {
+        let rect = gf::rect::init(
             position.x,
             position.y,
             PLAYER_W,
             PLAYER_H,
         );
-        let self = union(actor::new(rect), {
-            "velocity": gf::vec2::new(0, 0),
+        let self = union(actor::init(rect), {
+            "velocity": gf::vec2::init(0, 0),
             "coyote_time": 0,
             "jump_buffer": 0,
         });
@@ -277,12 +277,12 @@ let player = union(actor, {
     },
     "is_grounded": function(self) {
         return collides_with_any_solid(
-            translate(self.*.collider(), gf::vec2::new(0, +1))
+            translate(self.*.collider(), gf::vec2::init(0, +1))
         );
     },
     "draw": function(self) {
-        draw_rect_solid(self.*.collider(), gf::color::new(0x00, 0xAA, 0x00, null));
-        draw_rect_empty(self.*.collider(), gf::color::new(0x00, 0xEE, 0x00, null), 1);
+        draw_rect_solid(self.*.collider(), gf::color::init(0x00, 0xAA, 0x00, null));
+        draw_rect_empty(self.*.collider(), gf::color::init(0x00, 0xEE, 0x00, null), 1);
     },
     # Actions
     "halt_x": function(self) {
@@ -294,28 +294,28 @@ let player = union(actor, {
 });
 
 let terrain = union(solid, {
-    "new": function(rect) {
-        let self = solid::new(rect);
+    "init": function(rect) {
+        let self = solid::init(rect);
         setmeta(self.&, terrain);
         return self;
     },
     "draw": function(self) {
-        draw_rect_solid(self.*.rect, gf::color::new(0x00, 0xAA, 0xAA, null));
-        draw_rect_empty(self.*.rect, gf::color::new(0x00, 0xEE, 0xEE, null), 1);
+        draw_rect_solid(self.*.rect, gf::color::init(0x00, 0xAA, 0xAA, null));
+        draw_rect_empty(self.*.rect, gf::color::init(0x00, 0xEE, 0xEE, null), 1);
     },
 });
 
 let platform = union(solid, {
-    "new": function(rect, direction) {
-        let self = union(solid::new(rect), {
+    "init": function(rect, direction) {
+        let self = union(solid::init(rect), {
             "direction": direction,
         });
         setmeta(self.&, platform);
         return self;
     },
     "draw": function(self) {
-        draw_rect_solid(self.*.rect, gf::color::new(0xAA, 0x00, 0xAA, null));
-        draw_rect_empty(self.*.rect, gf::color::new(0xEE, 0x00, 0xEE, null), 1);
+        draw_rect_solid(self.*.rect, gf::color::init(0xAA, 0x00, 0xAA, null));
+        draw_rect_empty(self.*.rect, gf::color::init(0xEE, 0x00, 0xEE, null), 1);
     },
 });
 
@@ -330,104 +330,104 @@ let frame = 1;
 
 let font = gf::font::load(module::directory + "/assets/Unispace-Bold.otf", (TILE_S - 2) * SCALE);
 
-let player = player::new(gf::vec2::new(
+let player = player::init(gf::vec2::init(
     (GAME_W / 4 - PLAYER_W / 4).floor(),
     (GAME_H / 2 - PLAYER_H / 2).floor(),
 ));
 actors.push(player.&);
 
-let floor = terrain::new(
-    gf::rect::new(
+let floor = terrain::init(
+    gf::rect::init(
         0,
         (GAME_H / TILE_S).floor() * TILE_S - TILE_S * 2,
         GAME_W,
         TILE_S * 3,
     )
 );
-let roof = terrain::new(
-    gf::rect::new(
+let roof = terrain::init(
+    gf::rect::init(
         0,
         0,
         GAME_W,
         TILE_S,
     )
 );
-let wall_l = terrain::new(
-    gf::rect::new(
+let wall_l = terrain::init(
+    gf::rect::init(
         0,
         0,
         TILE_S * 2,
         GAME_H - (GAME_H - floor.rect.y),
     )
 );
-let wall_r = terrain::new(
-    gf::rect::new(
+let wall_r = terrain::init(
+    gf::rect::init(
         GAME_W - TILE_S * 2,
         0,
         TILE_S * 2,
         GAME_H - (GAME_H - floor.rect.y),
     )
 );
-let platform_a = platform::new(
-    gf::rect::new(
+let platform_a = platform::init(
+    gf::rect::init(
         wall_l.rect.w + TILE_S,
         TILE_S * 4,
         TILE_S * 4,
         TILE_S * 1,
     ),
-    gf::vec2::new(0, +1),
+    gf::vec2::init(0, +1),
 );
-let platform_b = platform::new(
-    gf::rect::new(
+let platform_b = platform::init(
+    gf::rect::init(
         wall_l.rect.w + TILE_S * 10,
         TILE_S * 13,
         TILE_S * 4,
         TILE_S * 1,
     ),
-    gf::vec2::new(+1, 0),
+    gf::vec2::init(+1, 0),
 );
-let terrain_a = terrain::new(
-    gf::rect::new(
+let terrain_a = terrain::init(
+    gf::rect::init(
         ((GAME_W / 2) / TILE_S).floor() * TILE_S - TILE_S * 4,
         TILE_S * 14,
         TILE_S * 8,
         TILE_S * 2
     ),
 );
-let terrain_b = terrain::new(
-    gf::rect::new(
+let terrain_b = terrain::init(
+    gf::rect::init(
         terrain_a.rect.x,
         terrain_a.rect.y + terrain_a.rect.h,
         TILE_S * 4,
         floor.rect.y - (terrain_a.rect.y + terrain_a.rect.h),
     ),
 );
-let terrain_c = terrain::new(
-    gf::rect::new(
+let terrain_c = terrain::init(
+    gf::rect::init(
         terrain_a.rect.x + TILE_S * 4,
         terrain_a.rect.y + terrain_a.rect.h + player.rect.h,
         TILE_S * 3,
         floor.rect.y - (terrain_a.rect.y + terrain_a.rect.h + player.rect.h),
     ),
 );
-let terrain_d = terrain::new(
-    gf::rect::new(
+let terrain_d = terrain::init(
+    gf::rect::init(
         GAME_W - wall_r.rect.w - TILE_S * 8,
         TILE_S * 12,
         TILE_S * 4,
         TILE_S * 1,
     ),
 );
-let terrain_e = terrain::new(
-    gf::rect::new(
+let terrain_e = terrain::init(
+    gf::rect::init(
         GAME_W - wall_r.rect.w - TILE_S * 1,
         TILE_S * 8,
         TILE_S * 1,
         TILE_S * 1,
     ),
 );
-let terrain_f = terrain::new(
-    gf::rect::new(
+let terrain_f = terrain::init(
+    gf::rect::init(
         wall_l.rect.w + TILE_S,
         platform_a.rect.y - TILE_S,
         TILE_S * 4,
@@ -519,8 +519,8 @@ while gf::running() {
     }
     gf::draw::text(
         font,
-        gf::vec2::new(SCALE, SCALE),
-        gf::color::new(0x00, 0x80, 0x00, null),
+        gf::vec2::init(SCALE, SCALE),
+        gf::color::init(0x00, 0x80, 0x00, null),
         "FPS " + string(gf::fps().fixed(0)),
     );
     if not actors.contains(player.&) {
@@ -528,8 +528,8 @@ while gf::running() {
         let size = gf::measure::text(font, text);
         gf::draw::text(
             font,
-            gf::vec2::new(SCREEN_W / 2 - size.x / 2, SCREEN_H / 2 - size.y / 2),
-            gf::color::new(0xFF, 0xFF, 0xFF, null),
+            gf::vec2::init(SCREEN_W / 2 - size.x / 2, SCREEN_H / 2 - size.y / 2),
+            gf::color::init(0xFF, 0xFF, 0xFF, null),
             text,
         );
     }
